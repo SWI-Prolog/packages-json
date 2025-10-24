@@ -35,7 +35,7 @@
 :- module(js_grammar_compat,
           [ js_token//1
           ]).
-:- use_module(library(json_grammer)).
+:- use_module(library(json_grammar)).
 
 /** <module> Old JSON library
 
