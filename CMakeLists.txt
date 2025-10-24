@@ -16,10 +16,15 @@ swipl_plugin(
 test_libs(json)
 
 if(HAVE_HTTP_PACKAGE)
+set(JSON_HTTP_FILES)
+if(NOT EMSCRIPTEN)
+  set(JSON_HTTP_FILES http_json.pl)
+endif()
+
   swipl_plugin(
       json_http_plugin
       PL_LIB_SUBDIR http
-      PL_LIBS http_json.pl ${JSON_COMPAT_FILES})
+      PL_LIBS ${JSON_HTTP_FILES} ${JSON_COMPAT_FILES})
   add_dependencies(json json_http_plugin)
 endif()
 
