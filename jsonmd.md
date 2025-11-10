@@ -32,10 +32,11 @@ or (using json_read_dict/2):
     _{age:42, children:["Mary", "John"], married:true, name:"Bob"}
 
 
-The SWI-Prolog JSON interface consists of three libraries:
+The SWI-Prolog JSON interface consists of the following libraries:
 
     * library(json) provides support for the core JSON object
       serialization and parsing.
+    * library(json_schema) implements JSON schema validation.
     * library(json_convert) converts between the primary
       representation of JSON terms in Prolog and more application
       oriented Prolog terms.  E.g. point(X,Y) vs. object([x=X,y=Y]).
@@ -43,6 +44,7 @@ The SWI-Prolog JSON interface consists of three libraries:
       the HTTP client and server libraries.
 
     [[library(json)]]
+    [[library(json_schema)]]
     [[library(json_convert)]]
     [[library(http/http_json)]]
 
