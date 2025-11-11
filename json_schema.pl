@@ -37,45 +37,47 @@
             json_compile_schema/3,           % +Schema, -CompiledType, +Options
             json_check/3                     % +CompiledType, +Data, +Options
           ]).
-
-:- use_module(library(apply), [maplist/3, partition/4, maplist/2, include/3]).
-:- use_module(library(base64), [base64/2]).
-:- use_module(library(debug), [assertion/1, debug/3]).
-:- use_module(library(error),
-              [ is_of_type/2,
-                existence_error/3,
-                type_error/2,
-                must_be/2,
-                permission_error/3
-              ]).
-:- use_module(library(lists),
-              [ member/2,
-                nth0/3,
-                append/3,
-                select/3,
-                selectchk/4,
-                selectchk/3,
-                delete/3
-              ]).
-:- use_module(library(option),
+:- use_module(library(apply_macros), []).
+:- autoload(library(apply), [maplist/3, partition/4, maplist/2, include/3]).
+:- autoload(library(base64), [base64/2]).
+:- autoload(library(debug), [assertion/1, debug/3]).
+:- autoload(library(error),
+            [ is_of_type/2,
+              existence_error/3,
+              type_error/2,
+              must_be/2,
+              permission_error/3
+            ]).
+:- autoload(library(lists),
+            [ member/2,
+              nth0/3,
+              append/3,
+              select/3,
+              selectchk/4,
+              selectchk/3,
+              delete/3
+            ]).
+:- autoload(library(option),
               [option/2, option/3, merge_options/3, select_option/4]).
-:- use_module(library(pcre), [re_match/2]).
-:- use_module(library(sgml), [xsd_time_string/3]).
-:- use_module(library(uri),
-              [ uri_file_name/2,
-                uri_normalized/3,
-                uri_components/2,
-                uri_data/3,
-                uri_encoded/3,
-                uri_data/4,
-                uri_authority_components/2,
-                uri_authority_data/3
-              ]).
-:- use_module(library(http/http_open), [http_open/3]).
-:- use_module(library(url), [is_absolute_url/1]).
-:- use_module(library(dicts), [dict_keys/2, mapdict/3, mapdict/2]).
-:- use_module(library(json), [json_read_dict/2]).
-:- use_module(library(pairs), [pairs_keys/2]).
+:- autoload(library(pcre), [re_match/2]).
+:- autoload(library(sgml), [xsd_time_string/3]).
+:- autoload(library(uri),
+            [ uri_file_name/2,
+              uri_normalized/3,
+              uri_components/2,
+              uri_data/3,
+              uri_encoded/3,
+              uri_data/4,
+              uri_authority_components/2,
+              uri_authority_data/3
+            ]).
+:- if(exists_source(library(http/http_open))).
+:- autoload(library(http/http_open), [http_open/3]).
+:- endif.
+:- autoload(library(url), [is_absolute_url/1]).
+:- autoload(library(dicts), [dict_keys/2, mapdict/3, mapdict/2]).
+:- autoload(library(json), [json_read_dict/2]).
+:- autoload(library(pairs), [pairs_keys/2]).
 
 :- multifile
     json_schema/2.                                % +URL, -Schema
@@ -972,13 +974,21 @@ url_fetch_json(FetchURL, Doc, Options) :-
     ->  Doc = JSON
     ;   fake_url(FetchURL)
     ->  permission_error(access, url, FetchURL)
-    ;   setup_call_cleanup(
-            http_open(FetchURL, In, []),
-            json_read_dict(In, JSON),
-            close(In)),
+    ;   load_json_from_http(FetchURL, JSON),
         open_list_add(FetchURL-JSON, Schemas)
     ->  Doc = JSON
     ).
+
+:- if(current_predicate(http_open/3)).
+load_json_from_http(URL, JSON) :-
+    setup_call_cleanup(
+        http_open(URL, In, []),
+        json_read_dict(In, JSON),
+        close(In)).
+:- endif.
+load_json_from_http(URL, _) :-
+    permission_error(access, url, URL).
+
 
 fake_url(URL) :-
     uri_components(URL, Components),
