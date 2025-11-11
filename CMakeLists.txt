@@ -3,17 +3,23 @@ project(swipl-json)
 
 include("../cmake/PrologPackage.cmake")
 has_package(http HAVE_HTTP_PACKAGE)
+has_package(pcre HAVE_PCRE_PACKAGE)
 
-set(JSON_PL_FILES json.pl json_convert.pl json_grammar.pl json_schema.pl)
+set(JSON_PL_FILES json.pl json_convert.pl json_grammar.pl)
 set(JSON_COMPAT_FILES json.pl json_convert.pl js_grammar.pl)
+set(JSON_TESTS json)
 prepend(JSON_COMPAT_FILES compat ${JSON_COMPAT_FILES})
+if(HAVE_PCRE_PACKAGE)
+  list(APPEND JSON_PL_FILES json_schema.pl)
+  list(APPEND JSON_TESTS json_schema)
+endif()
 
 swipl_plugin(
     json
     C_SOURCES json.c
     PL_LIBS ${JSON_PL_FILES})
 
-test_libs(json json_schema)
+test_libs(${JSON_TESTS})
 
 if(HAVE_HTTP_PACKAGE)
 set(JSON_HTTP_FILES)
