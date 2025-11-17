@@ -43,8 +43,10 @@
             test_json_schema/0
           ]).
 :- use_module(library(json_schema)).
+:- if(exists_source(library(http/http_server))).
 :- use_module(library(http/http_server)).
 :- use_module(library(http/http_files)).
+:- endif.
 :- use_module(library(apply)).
 :- use_module(library(debug)).
 :- use_module(library(filesex)).
@@ -72,6 +74,7 @@ test_version('draft2020-12').
 %   HTTP server for localhost:1234.
 
 test_json_schema :-
+    exists_source(library(http/http_server)),
     test_version(Version),
     absolute_file_name(json_suite(tests/Version), Dir,
                        [ file_type(directory),
@@ -238,6 +241,7 @@ testset_has_test(TestSet, TestName) =>
 		 *             REMOTE		*
 		 *******************************/
 
+:- if(exists_source(library(http/http_server))).
 :- http_handler(root(.),
                 http_reply_from_files(json_suite(remotes), []),
                 [ prefix ]).
@@ -253,6 +257,11 @@ remote_server :-
 remote_server :-
     http_server([port(localhost:1234)]).
 
+:- else.
+
+remote_server.
+
+:- endif.
 
 		 /*******************************
 		 *            MESSAGES		*
@@ -293,4 +302,4 @@ prolog:message(parse_schema_failed(File, Description)) -->
     [ '~w: could not parse schema for "~s": failed'-[File, Description] ].
 prolog:message(test_summary(Total, Passed, Failed)) -->
     [ '~D tests.  ~D passed, ~D failed'-[Total, Passed, Failed] ].
-:- use_module(library(http/http_server)).
+

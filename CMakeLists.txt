@@ -11,7 +11,9 @@ set(JSON_TESTS json)
 prepend(JSON_COMPAT_FILES compat ${JSON_COMPAT_FILES})
 if(HAVE_PCRE_PACKAGE)
   list(APPEND JSON_PL_FILES json_schema.pl)
-  list(APPEND JSON_TESTS json_schema)
+  if(HAVE_HTTP_PACKAGE)
+    list(APPEND JSON_TESTS json_schema)
+  endif()
 endif()
 
 swipl_plugin(
