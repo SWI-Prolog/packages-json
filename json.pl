@@ -68,6 +68,7 @@
                      [ null(ground),
                        true(ground),
                        false(ground),
+                       end_of_file(ground),
                        value_string_as(oneof([atom,string])),
                        qqdict(list(compound(=(atom,var))))
                      ]).
