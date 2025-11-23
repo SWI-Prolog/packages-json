@@ -45,6 +45,8 @@ The SWI-Prolog JSON interface consists of the following libraries:
 
     [[library(json)]]
     [[library(json_schema)]]
+    [[library(json_rpc_client)]]
+    [[library(json_rpc_server)]]
     [[library(json_convert)]]
     [[library(http/http_json)]]
 
