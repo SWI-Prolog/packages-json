@@ -133,11 +133,11 @@ terms.
               end_of_file:ground = error,
               value_string_as:oneof([atom,string]) = atom,
               tag:atom = '',
-              default_tag:atom,
+              default_tag:(var;atom) = '#',
               qqdict:list(compound(atom=var))).
 
 default_json_dict_options(
-    json_options(null, true, false, error, string, '', _, _)).
+    json_options(null, true, false, error, string, '', #, _)).
 
 
                  /*******************************
