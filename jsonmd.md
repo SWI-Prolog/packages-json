@@ -29,7 +29,7 @@ we get either (using json_read/2):
 
 or (using json_read_dict/2):
 
-    _{age:42, children:["Mary", "John"], married:true, name:"Bob"}
+    #{age:42, children:["Mary", "John"], married:true, name:"Bob"}
 
 
 The SWI-Prolog JSON interface consists of the following libraries:
