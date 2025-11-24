@@ -384,7 +384,7 @@ raise_run_error(Error) =>
                 _)).
 
 
-%!  json_rpc_error(+Code, +Message) det.
+%!  json_rpc_error(+Code, +Message).
 %!  json_rpc_error(+Code, +Message, +Data).
 %
 %   Normally  called  from  a   method    implementation   to  raise  an
@@ -394,6 +394,8 @@ raise_run_error(Error) =>
 %   JSON RPC server errors.
 %   @arg Message is a short string decribing the error
 %   @arg Data is optional JSON data that provides context for the error.
+%   @error json_rpc_error(Dict), where `Dict` contains the JSON RPC
+%   defined fields `code`, `message` and optionally `data`.
 
 json_rpc_error(Code, Message) :-
     throw(error(json_rpc_error(#{ code: Code,
