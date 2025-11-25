@@ -41,8 +41,9 @@
 :- autoload(library(option), [option/2]).
 :- use_module(library(debug), [debug/3]).
 :- autoload(library(apply), [maplist/4, maplist/3]).
-:- autoload(library(lists), [append/3]).
+:- autoload(library(lists), [append/3, member/2]).
 :- autoload(library(terms), [mapsubterms/3]).
+:- autoload(library(http/http_stream), [stream_range_open/3]).
 
 /** <module> JSON RPC client
 
@@ -71,14 +72,12 @@ json_call(Stream, Goal, Result, Options) :-
     Goal =.. [Name|Args],
     client_id(Id, Options),
     debug(json_rpc, 'Sending request ~p', [Id]),
-    with_output_to(Stream,
-                   json_write_dict(Stream,
-                                   #{ jsonrpc: "2.0",
-                                      id: Id,
-                                      method: Name,
-                                      params: Args
-                                    }, Options)),
-    flush_output(Stream),
+    json_send(Stream,
+              #{ jsonrpc: "2.0",
+                 id: Id,
+                 method: Name,
+                 params: Args
+               }, Options),
     setup_call_catcher_cleanup(
         true,
         json_wait_reply(Stream, Id, Result, Options),
@@ -129,13 +128,11 @@ client_cleanup(_, Stream, Id) =>
 
 json_notify(Stream, Goal, Options) :-
     Goal =.. [Name|Args],
-    with_output_to(Stream,
-                   json_write_dict(Stream,
-                                   #{ jsonrpc: "2.0",
-                                      method: Name,
-                                      params: Args
-                                    }, Options)),
-    flush_output(Stream).
+    json_send(Stream,
+              #{ jsonrpc: "2.0",
+                 method: Name,
+                 params: Args
+               }, Options).
 
 %!  json_batch(+Stream, +Notifications:list, +Calls:list, -Results:list,
 %!             +Options) is det.
@@ -156,7 +153,7 @@ json_batch(Stream, Notifications, Calls, Results, Options) :-
     maplist(call_to_json_request, Calls, IDs, Requests1),
     maplist(call_to_json_notification, Notifications, Requests2),
     append(Requests1, Requests2, Batch),
-    with_output_to(Stream, json_write_dict(Stream, Batch, Options)),
+    json_send(Stream, Batch, Options),
     flush_output(Stream),
     (   IDs == []
     ->  true
@@ -191,6 +188,33 @@ batch_result(Reply, Result), Result0 = Reply.get(result) =>
 batch_result(Reply, Result), Result0 = Reply.get(error) =>
     Result = error(Result0).
 
+%!  json_send(+Stream, +Dict, +Options)
+
+json_send(Stream, Dict, Options) :-
+    option(header(true), Options),
+    !,
+    with_output_to(string(Msg),
+                   json_write_dict(current_output, Dict, Options)),
+    utf8_length(Msg, Len),
+    format(Stream,
+           'Content-Length: ~d\r\n\r\n~s', [Len, Msg]),
+    flush_output(Stream).
+json_send(Stream, Dict, Options) :-
+    with_output_to(Stream,
+                   json_write_dict(Stream, Dict, Options)),
+    flush_output(Stream).
+
+utf8_length(String, Len) :-
+    setup_call_cleanup(
+        open_null_stream(Null),
+        (   set_stream(Null, encoding(utf8)),
+            format(Null, '~s', [String]),
+            flush_output(Null),
+            byte_count(Null, Len)
+        ),
+        close(Null)).
+
+
 %!  get_json_result_queue(+Stream, -Queue, +Options) is det.
 %
 %   Find the result queue associated to Stream.  If this does not exist,
@@ -223,11 +247,7 @@ handle_result_loop(Stream, Options) :-
 
 handle_result(Stream, EOF, Options) :-
     Error = error(Formal, _),
-    catch(json_read_dict(Stream,
-                         Reply,
-                         [ end_of_file(end_of_file(true))
-                         | Options
-                         ]),
+    catch(json_receive(Stream, Reply, Options),
           Error,
           true),
     debug(json_rpc, 'Received ~p', [Reply]),
@@ -237,6 +257,39 @@ handle_result(Stream, EOF, Options) :-
     ->  handle_reply(Stream, Reply)
     ;   handle_error(Error, EOF)
     ).
+
+json_receive(Stream, Reply, Options) :-
+    option(header(true), Options),
+    !,
+    read_header(Stream, Lines),
+    header_content_length(Lines, Length),
+    setup_call_cleanup(
+        stream_range_open(Stream, Data, [size(Length)]),
+        json_read_dict(Data,
+                       Reply,
+                       Options),
+        close(Data)).
+json_receive(Stream, Reply, Options) :-
+    json_read_dict(Stream,
+                   Reply,
+                   [ end_of_file(end_of_file(true))
+                   | Options
+                   ]).
+
+read_header(Stream, Lines) :-
+    read_string(Stream, "\n", "\r\t ", Sep, Line),
+    (   (Line == "" ; Sep == -1)
+    ->  Lines = []
+    ;   Lines = [Line|Rest],
+        read_header(Stream, Rest)
+    ).
+
+header_content_length(Lines, Length) :-
+    member(Line, Lines),
+    split_string(Line, ":", "\t\s", [Field,Value]),
+    string_lower(Field, "content-length"),
+    !,
+    number_string(Length, Value).
 
 handle_reply(Stream, Batch),
     is_list(Batch) =>
