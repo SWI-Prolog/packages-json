@@ -82,8 +82,11 @@ test(batch, X == [7,5]) :-
                [ subtract(10,3),
                  subtract(12,7)
                ], X, []).
-test(app_error, error(json_rpc_error(#{code:2, message:"Account does not exist"}))) :-
-    json_call(deposit(#{account:no_such_account, amount:10}), _Balance, []).
+test(app_error, error(json_rpc_error(
+                          #{code:2,
+                            message:"Account does not exist"}))) :-
+    json_call(deposit(#{account:no_such_account, amount:10}),
+              _Balance, []).
 test(open, [Open,Close] == [true,true]) :-
     json_call(open_account(bob), Open, []),
     json_call(close_account(bob), Close, []).
@@ -149,13 +152,13 @@ test(no_result, [Noticed,Result] == ["Hello world",true]) :-
 :- json_method
     subtract(#{type:number}, #{type:number}): #{type:number},
     divide(#{type:number}, #{type:number}): #{type:number},
-    open_account(#{type: string}): #{type:boolean},
-    close_account(#{type: string}): #{type:boolean},
+    open_account([#{type: string}]): #{type:boolean},
+    close_account([#{type: string}]): #{type:boolean},
     deposit(#{ properties:
                  #{ account: #{type:string},
                     amount:  #{type:number}
                   }}): #{type:number},
-    notice(#{type: string}).
+    notice([#{type: string}]).
 
 subtract(A, B, C) :-
     C is A - B.

@@ -133,15 +133,25 @@ compile_methods((A,B)) ==>
     compile_methods(B).
 compile_methods(M:Reply), callable(M) ==>
     { M =.. [Name|Args],
-      maplist(arg_type, Args, Types),
+      argv_type(Args, Type),
       arg_type(Reply, RType)
     },
-    [ '$json_method'(Name, array(Types), RType) ].
+    [ '$json_method'(Name, Type, RType) ].
 compile_methods(M), callable(M) ==>
     { M =.. [Name|Args],
-      maplist(arg_type, Args, Types)
+      argv_type(Args, Type)
     },
-    [ '$json_method'(Name, array(Types)) ].
+    [ '$json_method'(Name, Type) ].
+
+argv_type([Named], QType), is_dict(Named) =>
+    arg_type(Named.put(type, "object"), Type),
+    QType = named(Type).
+argv_type([Args], Type), is_list(Args) =>
+    maplist(arg_type, Args, Types),
+    Type = positional(Types).
+argv_type(Args, Type) =>
+    maplist(arg_type, Args, Types),
+    Type = positional(Types).
 
 arg_type(Schema, Type) =>
     json_compile_schema(Schema, Type, []).
@@ -243,10 +253,10 @@ json_rpc_result_(M, Request, Result, Options) :-
     ;   print_message(error, json_rpc(invalid_request(Request)))
     ).
 
-json_rpc_result(M, Method, Params, Id, Reply, Options) :-
-    M:'$json_method'(Method, array(Types), RType),
+json_rpc_result(M, Method, Params0, Id, Reply, Options) :-
+    M:'$json_method'(Method, Types, RType),
     !,
-    check_params(Params, Types, Options),
+    check_params(Params0, Types, Params, Options),
     debug(json_rpc(server), 'Calling method ~q for request ~p', [Method,Id]),
     run_method(M:Method, Params, Result),
     json_check_result(RType, Result, Options),
@@ -254,10 +264,10 @@ json_rpc_result(M, Method, Params, Id, Reply, Options) :-
                result: Result,
                id: Id
              }.
-json_rpc_result(M, Method, Params, Id, Reply, Options) :-
-    M:'$json_method'(Method, array(Types)),
+json_rpc_result(M, Method, Params0, Id, Reply, Options) :-
+    M:'$json_method'(Method, Types),
     !,
-    check_params(Params, Types, Options),
+    check_params(Params0, Types, Params, Options),
     debug(json_rpc(server), 'Calling method ~q for request ~p', [Method,Id]),
     (   apply(M:Method, Params)
     ->  Result = true
@@ -276,27 +286,27 @@ json_rpc_result(_M, Method, _Params, Id, Reply, _Options) :-
                        }
              }.
 
-check_params(Params, Types, Options) :-
+check_params(Params, positional(Types), Params, Options) :-
     must_be(list, Params),
     maplist(json_check_param(Options), Types, Params),
     !.
-check_params(Params, Types, _Options) :-
+check_params(Params, positional(Types), _Params, _Options) :-
     length(Types, Expected),
     length(Params, Found),
     format(string(Msg), "Expected ~d parameters, found ~d", [Expected, Found]),
     raise_param_error_data(Msg).
+check_params(Param, named(Type), [Param], Options) :-
+    json_check_param(Options, Type, Param).
 
-json_rpc_notify(M, Method, Params, Options) :-
-    M:'$json_method'(Method, array(Types)),
+json_rpc_notify(M, Method, Params0, Options) :-
+    M:'$json_method'(Method, Types),
     !,
-    must_be(list, Params),
-    maplist(json_check_param(Options), Types, Params),
+    check_params(Params0, Types, Params, Options),
     apply(M:Method, Params).
-json_rpc_notify(M, Method, Params, Options) :-
-    M:'$json_method'(Method, array(Types), _RType),
+json_rpc_notify(M, Method, Params0, Options) :-
+    M:'$json_method'(Method, Types, _RType),
     !,
-    must_be(list, Params),
-    maplist(json_check_param(Options), Types, Params),
+    check_params(Params0, Types, Params, Options),
     run_method(M:Method, Params, _Result).
 
 %!  json_exception_to_reply(+Error, +Request, -Reply) is det.
