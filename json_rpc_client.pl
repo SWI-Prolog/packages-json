@@ -67,9 +67,25 @@ RPC server.
 %
 %   If Stream is closed this library   terminates the thread and related
 %   message queue.
+%
+%   @arg Goal is a callable term.  The   functor  name is the method. If
+%   there is a single argument that  is   a  dict,  we invoke a JSON-RPC
+%   method using _named arguments_. If there   is a single argument that
+%   is a list, use the elements of   the list as _positional arguments_.
+%   If  there  are  zero  or  more  than  one  arguments  use  these  as
+%   _positional arguments_.  Examples:
+%
+%     |Term             |Method|Type       |JSON (`params`) |
+%     -------------------------------------------------------
+%     |f(#{a:1,b:2})      | f | named      | {"a":1, "b":2} |
+%     |f(["a", 42])       | f | positional | ["a", 42]      |
+%     |f([#{"a":1}])      | f | positional | [{"a":1}]      |
+%     |f()                | f | positional | []             |
+%     |f("a", 42)         | f | positional | ["a", 42]      |
 
 json_call(Stream, Goal, Result, Options) :-
-    Goal =.. [Name|Args],
+    Goal =.. [Name|Args0],
+    call_args(Args0, Args),
     client_id(Id, Options),
     debug(json_rpc, 'Sending request ~p', [Id]),
     json_send(Stream,
@@ -83,6 +99,13 @@ json_call(Stream, Goal, Result, Options) :-
         json_wait_reply(Stream, Id, Result, Options),
         Catcher,
         client_cleanup(Catcher, Stream, Id)).
+
+call_args([Arg], Args), is_dict(Arg) =>
+    Args = Arg.
+call_args([Args0], Args), is_list(Args0) =>
+    Args = Args0.
+call_args(Args0, Args) =>
+    Args = Args0.
 
 json_wait_reply(Stream, Id, Result, Options) :-
     with_mutex(json_rpc_client,
@@ -127,7 +150,8 @@ client_cleanup(_, Stream, Id) =>
 %   for the result.
 
 json_notify(Stream, Goal, Options) :-
-    Goal =.. [Name|Args],
+    Goal =.. [Name|Args0],
+    call_args(Args0, Args),
     json_send(Stream,
               #{ jsonrpc: "2.0",
                  method: Name,
