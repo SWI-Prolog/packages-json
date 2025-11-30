@@ -38,9 +38,9 @@
             json_check/3                     % +CompiledType, +Data, +Options
           ]).
 :- use_module(library(apply_macros), []).
+:- use_module(library(debug), [assertion/1, debug/3]).
 :- autoload(library(apply), [maplist/3, partition/4, maplist/2, include/3]).
 :- autoload(library(base64), [base64/2]).
-:- autoload(library(debug), [assertion/1, debug/3]).
 :- autoload(library(error),
             [ is_of_type/2,
               existence_error/3,
