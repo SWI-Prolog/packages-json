@@ -220,9 +220,6 @@ json_rpc_dispatch_request(M, Stream, Request, Options) :-
     json_rpc_result(M, Request, Result, Options),
     json_rpc_reply(Stream, Result, Options).
 
-json_rpc_dispatch_request(M, Options, Request, Result) :-
-    json_rpc_result(M, Request, Result, Options).
-
 %!  json_rpc_reply(+Stream, +Result, +Options) is det.
 
 json_rpc_reply(Stream, Result, Options),
