@@ -52,6 +52,9 @@
 :- meta_predicate
     json_rpc_dispatch(:, +).
 
+:- public
+    json_rpc_dispatch_request/4.   % +M, +Stream, +Request, +Options
+
 /** <module> JSON RPC Server
 
 This module implements an JSON RPC server. It provides declarations that
@@ -197,22 +200,27 @@ json_rpc_dispatch_1(M, Stream, EOF, Options) :-
     (   Request == end_of_file(true)
     ->  EOF = true
     ;   var(Formal)
-    ->  json_rpc_dispatch_2(M, Stream, Request, Options)
+    ->  json_rpc_dispatch_request(M, Stream, Request, Options)
     ;   print_message(error, Error)
     ).
 
 
-json_rpc_dispatch_2(M, Stream, Requests, Options) :-
+%!  json_rpc_dispatch_request(+Module, +Stream, +Request, +Options)
+%
+%   Handle a request that has been read  from Stream, possibly sending a
+%   reply to Stream.
+
+json_rpc_dispatch_request(M, Stream, Requests, Options) :-
     is_list(Requests),
     !,                                          % batch processing
     maplist(json_rpc_result_r(M, Options), Requests, AllResults),
     include(nonvar, AllResults, Results),
     json_rpc_reply(Stream, Results, Options).
-json_rpc_dispatch_2(M, Stream, Request, Options) :-
+json_rpc_dispatch_request(M, Stream, Request, Options) :-
     json_rpc_result(M, Request, Result, Options),
     json_rpc_reply(Stream, Result, Options).
 
-json_rpc_result_r(M, Options, Request, Result) :-
+json_rpc_dispatch_request(M, Options, Request, Result) :-
     json_rpc_result(M, Request, Result, Options).
 
 %!  json_rpc_reply(+Stream, +Result, +Options) is det.
@@ -221,11 +229,11 @@ json_rpc_reply(Stream, Result, Options),
     is_dict(Result),
     Id = Result.get(id) =>
     debug(json_rpc(server), 'Replying ~p for request ~p', [Result,Id]),
-    json_write_dict(Stream, Result, Options),
+    with_output_to(Stream, json_write_dict(Stream, Result, Options)),
     flush_output(Stream).
 json_rpc_reply(Stream, Results, Options), is_list(Results) =>
     debug(json_rpc(server), 'Replying batch results: ~p', [Results]),
-    json_write_dict(Stream, Results, Options),
+    with_output_to(Stream, json_write_dict(Stream, Results, Options)),
     flush_output(Stream).
 json_rpc_reply(_Stream, Result, _Options), var(Result) =>
     true.                                       % notification
@@ -235,6 +243,9 @@ json_rpc_result(M, Request, Result, Options) :-
     catch(json_rpc_result_(M, Request, Result, Options),
           Error,
           json_exception_to_reply(Error, Request, Result)).
+
+json_rpc_result_r(M, Options, Request, Result) :-
+    json_rpc_result(M, Request, Result, Options).
 
 :- det(json_rpc_result_/4).
 json_rpc_result_(M, Request, Result, Options) :-

@@ -35,7 +35,8 @@
 :- module(json_rpc_client,
           [ json_call/4,          % +Stream, +Goal, -Result, +Options
             json_notify/3,        % +Stream, +Goal, +Options
-            json_batch/5          % +Stream, +Notifications, +Calls, -Results, +Options
+            json_batch/5,         % +Stream, +Notifications, +Calls, -Results, +Options
+            json_full_duplex/2    % +Stream, :Options
           ]).
 :- autoload(library(json), [json_write_dict/3, json_read_dict/3]).
 :- autoload(library(option), [option/2]).
@@ -44,6 +45,9 @@
 :- autoload(library(lists), [append/3, member/2]).
 :- autoload(library(terms), [mapsubterms/3]).
 :- autoload(library(http/http_stream), [stream_range_open/3]).
+
+:- meta_predicate
+    json_full_duplex(+, :).
 
 /** <module> JSON RPC client
 
@@ -82,6 +86,9 @@ RPC server.
 %     |f([#{"a":1}])      | f | positional | [{"a":1}]      |
 %     |f()                | f | positional | []             |
 %     |f("a", 42)         | f | positional | ["a", 42]      |
+%
+%     Options processed:
+%
 
 json_call(Stream, Goal, Result, Options) :-
     Goal =.. [Name|Args0],
@@ -238,6 +245,27 @@ utf8_length(String, Len) :-
         ),
         close(Null)).
 
+                /*******************************
+                *        INCOMMING DATA        *
+                *******************************/
+
+%!  json_full_duplex(+Stream, :Options) is det.
+%
+%   Start the thread for incomming data   and on requests, dispatch them
+%   using library(jso_rpc_server) in the module derived from the Options
+%   list.
+
+json_full_duplex(Stream, Options) :-
+    with_mutex(json_rpc_client, json_full_duplex_(Stream, Options)).
+
+json_full_duplex_(Stream, _) :-
+    json_result_queue(Stream, _Queue),
+    !,
+    permission_error(json, full_duplex, Stream).
+json_full_duplex_(Stream, M:Options) :-
+    get_json_result_queue(Stream, _Queue,
+                          [server_module(M)|Options]).
+
 
 %!  get_json_result_queue(+Stream, -Queue, +Options) is det.
 %
@@ -278,7 +306,7 @@ handle_result(Stream, EOF, Options) :-
     (   Reply == end_of_file(true)
     ->  EOF = true
     ;   var(Formal)
-    ->  handle_reply(Stream, Reply)
+    ->  handle_reply(Stream, Reply, Options)
     ;   handle_error(Error, EOF)
     ).
 
@@ -315,24 +343,31 @@ header_content_length(Lines, Length) :-
     !,
     number_string(Length, Value).
 
-handle_reply(Stream, Batch),
+handle_reply(Stream, Batch, _Options),
     is_list(Batch) =>
     maplist(get_dict(id), Batch, IDs),
     batch_id(IDs, Id),
     json_result_queue(Stream, Queue),
     send_done(Queue, Id, true(Batch)).
-handle_reply(Stream, Reply),
+handle_reply(Stream, Reply, _Options),
     #{ jsonrpc: "2.0",
        result: Result,
        id: Id } :< Reply =>
     json_result_queue(Stream, Queue),
     send_done(Queue, Id, true(Result)).
-handle_reply(Stream, Reply),
+handle_reply(Stream, Reply, _Options),
     #{ jsonrpc: "2.0",
        error: Error,
        id: Id } :< Reply =>
     json_result_queue(Stream, Queue),
     send_done(Queue, Id, throw(error(json_rpc_error(Error), _))).
+handle_reply(Stream, Request, Options),
+    #{ jsonrpc: "2.0",
+       method: _Method,
+       params: _Params } :< Request =>
+    option(server_module(M), Options),
+    json_rpc_server:json_rpc_dispatch_request(M, Stream, Request, Options).
+
 
 send_done(Queue, Id, _Data) :-
     retract(failed_id(Queue, Id)),
