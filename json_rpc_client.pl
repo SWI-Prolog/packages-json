@@ -314,13 +314,16 @@ json_receive(Stream, Reply, Options) :-
     option(header(true), Options),
     !,
     read_header(Stream, Lines),
-    header_content_length(Lines, Length),
-    setup_call_cleanup(
-        stream_range_open(Stream, Data, [size(Length)]),
-        json_read_dict(Data,
-                       Reply,
-                       Options),
-        close(Data)).
+    (   Lines == []
+    ->  Reply = end_of_file(true)
+    ;   header_content_length(Lines, Length),
+        setup_call_cleanup(
+            stream_range_open(Stream, Data, [size(Length)]),
+            json_read_dict(Data,
+                           Reply,
+                           Options),
+            close(Data))
+    ).
 json_receive(Stream, Reply, Options) :-
     json_read_dict(Stream,
                    Reply,
