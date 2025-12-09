@@ -58,8 +58,8 @@ RPC server.
 */
 
 :- dynamic
-    json_result_queue/2,                        % Stream, Queue
-    failed_id/2.                                % Queue, Id
+    json_result_queue/2,              % Stream, Queue
+    pending/2.                        % Id, Queue
 
 %!  json_call(+Stream, +Goal, -Result, +Options) is det.
 %
@@ -71,6 +71,15 @@ RPC server.
 %
 %   If Stream is closed this library   terminates the thread and related
 %   message queue.
+%
+%   Options are passed to   json_write_dict/3  and thread_get_message/3.
+%   Additional options:
+%
+%     - async(true)
+%       While generating an `id` field, we do not wait for the server to
+%       answer. If the server  answers  anyway,   a  non-error  reply is
+%       ignored, while an error reply  causes   the  error to be printed
+%       along with the request id.
 %
 %   @arg Goal is a callable term.  The   functor  name is the method. If
 %   there is a single argument that  is   a  dict,  we invoke a JSON-RPC
@@ -95,17 +104,20 @@ json_call(Stream, Goal, Result, Options) :-
     call_args(Args0, Args),
     client_id(Id, Options),
     debug(json_rpc, 'Sending request ~p', [Id]),
+    (   option(async(true), Options)
+    ->  Async = true
+    ;   asserta(pending(Id, Stream))
+    ),
     json_send(Stream,
               #{ jsonrpc: "2.0",
                  id: Id,
                  method: Name,
                  params: Args
                }, Options),
-    setup_call_catcher_cleanup(
-        true,
-        json_wait_reply(Stream, Id, Result, Options),
-        Catcher,
-        client_cleanup(Catcher, Stream, Id)).
+    (   Async == true
+    ->  true
+    ;   json_wait_reply(Stream, Id, Result, Options)
+    ).
 
 call_args([Arg], Args), is_dict(Arg) =>
     Args = Arg.
@@ -125,8 +137,7 @@ json_wait_reply(Stream, Id, Result, Options) :-
         ->  throw(Error)
         ;   Result1 = true(Result)
         )
-    ;   assertz(failed_id(Queue, Id)),
-        fail
+    ;   fail
     ).
 
 map_reply(Reply0, Reply, Options) :-
@@ -144,12 +155,6 @@ client_id(Id, Options) :-
     !.
 client_id(Id, _Options) :-
     flag(json_client_id, Id, Id+1).
-
-client_cleanup(exit, _, _) =>
-    true.
-client_cleanup(_, Stream, Id) =>
-    json_result_queue(Stream, Queue),
-    assertz(failed_id(Queue, Id)).
 
 %!  json_notify(+Stream, +Goal, +Options) is det.
 %
@@ -184,12 +189,16 @@ json_batch(Stream, Notifications, Calls, Results, Options) :-
     maplist(call_to_json_request, Calls, IDs, Requests1),
     maplist(call_to_json_notification, Notifications, Requests2),
     append(Requests1, Requests2, Batch),
-    json_send(Stream, Batch, Options),
-    flush_output(Stream),
     (   IDs == []
     ->  true
-    ;   batch_id(IDs, Id),
-        json_wait_reply(Stream, Id, Results0, Options),
+    ;   batch_id(IDs, BatchId),
+        asserta(pending(BatchId, Stream))
+    ),
+    json_send(Stream, Batch, Options),
+    flush_output(Stream),
+    (   var(BatchId)
+    ->  true
+    ;   json_wait_reply(Stream, BatchId, Results0, Options),
         sort(id, <, Results0, Results1),
         maplist(batch_result, Results1, Results)
     ).
@@ -350,20 +359,17 @@ handle_reply(Stream, Batch, _Options),
     is_list(Batch) =>
     maplist(get_dict(id), Batch, IDs),
     batch_id(IDs, Id),
-    json_result_queue(Stream, Queue),
-    send_done(Queue, Id, true(Batch)).
+    send_done(Stream, Id, true(Batch)).
 handle_reply(Stream, Reply, _Options),
     #{ jsonrpc: "2.0",
        result: Result,
        id: Id } :< Reply =>
-    json_result_queue(Stream, Queue),
-    send_done(Queue, Id, true(Result)).
+    send_done(Stream, Id, true(Result)).
 handle_reply(Stream, Reply, _Options),
     #{ jsonrpc: "2.0",
        error: Error,
        id: Id } :< Reply =>
-    json_result_queue(Stream, Queue),
-    send_done(Queue, Id, throw(error(json_rpc_error(Error), _))).
+    send_done(Stream, Id, throw(error(json_rpc_error(Error), _))).
 handle_reply(Stream, Request, Options),
     #{ jsonrpc: "2.0",
        method: _Method,
@@ -371,23 +377,13 @@ handle_reply(Stream, Request, Options),
     option(server_module(M), Options),
     json_rpc_server:json_rpc_dispatch_request(M, Stream, Request, Options).
 
-
-send_done(Queue, Id, _Data) :-
-    retract(failed_id(Queue, Id)),
-    !.
-send_done(Queue, Id, Data) :-
-    thread_send_message(Queue, done(Id, Data)),
-    clean_dead_requests(Queue).
-
-clean_dead_requests(Queue) :-
-    forall(failed_id(Queue, Id),
-           cleanup_dead_id(Queue, Id)).
-
-cleanup_dead_id(Queue, Id) :-
-    (   thread_get_message(Queue, done(Id, _), [timeout(0)])
-    ->  retract(failed_id(Queue, Id))
-    ;   true
-    ).
+send_done(Stream, Id, Data) :-
+    retract(pending(Id, Stream)),
+    !,
+    json_result_queue(Stream, Queue),
+    thread_send_message(Queue, done(Id, Data)).
+send_done(_Stream, Id, throw(error(json_rpc_error(Error), _)) :-
+    print_message(error, error(json_rpc_error(Error, Id), _))).
 
 handle_error(error(existence_error(stream, _), _), EOF) =>
     EOF = true.
