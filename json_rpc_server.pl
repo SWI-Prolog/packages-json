@@ -40,8 +40,8 @@
 
             op(1100, fx, json_method)
           ]).
-:- autoload(library(json),
-            [json_read_dict/3, json_write_dict/3]).
+:- use_module(library(json_rpc_common)).
+:- autoload(library(json), [json_read_dict/3]).
 :- autoload(library(apply), [maplist/3, include/3]).
 :- autoload(library(error), [must_be/2]).
 :- autoload(library(json_schema), [json_compile_schema/3, json_check/3]).
@@ -226,12 +226,10 @@ json_rpc_reply(Stream, Result, Options),
     is_dict(Result),
     Id = Result.get(id) =>
     debug(json_rpc(server), 'Replying ~p for request ~p', [Result,Id]),
-    with_output_to(Stream, json_write_dict(Stream, Result, Options)),
-    flush_output(Stream).
+    json_rpc_send(Stream, Result, Options).
 json_rpc_reply(Stream, Results, Options), is_list(Results) =>
     debug(json_rpc(server), 'Replying batch results: ~p', [Results]),
-    with_output_to(Stream, json_write_dict(Stream, Results, Options)),
-    flush_output(Stream).
+    json_rpc_send(Stream, Results, Options).
 json_rpc_reply(_Stream, Result, _Options), var(Result) =>
     true.                                       % notification
 
@@ -427,31 +425,6 @@ json_rpc_error(Code, Message, Data) :-
                                 }),
                 _)).
 
-
-                /*******************************
-                *           MESSAGES           *
-                *******************************/
-
-:- multifile prolog:error_message//1.
-
-prolog:error_message(json_rpc_error(Obj)) -->
-    { is_dict(Obj) },
-    json_rpc_error_message(Obj).
-
-json_rpc_error_message(Obj),
-    Data = Obj.get(Data) ==>
-    json_rpc_error_message_(Obj),
-    [ nl, '   Data: ~p'-[Data] ].
-json_rpc_error_message(Obj) ==>
-    json_rpc_error_message_(Obj).
-
-json_rpc_error_message_(Obj),
-    #{code:Code, message:Message} :< Obj,
-    between(-32768, -32000, Code) ==>
-    [ 'JSON RPC error ~d: ~s'-[Code, Message] ].
-json_rpc_error_message_(Obj),
-    #{code:Code, message:Message} :< Obj ==>
-    [ 'JSON RPC application error ~d: ~s'-[Code, Message] ].
 
                 /*******************************
                 *              IDE             *

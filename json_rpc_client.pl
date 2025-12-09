@@ -38,7 +38,8 @@
             json_batch/5,         % +Stream, +Notifications, +Calls, -Results, +Options
             json_full_duplex/2    % +Stream, :Options
           ]).
-:- autoload(library(json), [json_write_dict/3, json_read_dict/3]).
+:- use_module(library(json_rpc_common)).
+:- autoload(library(json), [json_read_dict/3]).
 :- autoload(library(option), [option/2]).
 :- use_module(library(debug), [debug/3]).
 :- autoload(library(apply), [maplist/4, maplist/3]).
@@ -108,12 +109,12 @@ json_call(Stream, Goal, Result, Options) :-
     ->  Async = true
     ;   asserta(pending(Id, Stream))
     ),
-    json_send(Stream,
-              #{ jsonrpc: "2.0",
-                 id: Id,
-                 method: Name,
-                 params: Args
-               }, Options),
+    json_rpc_send(Stream,
+                  #{ jsonrpc: "2.0",
+                     id: Id,
+                     method: Name,
+                     params: Args
+                   }, Options),
     (   Async == true
     ->  true
     ;   json_wait_reply(Stream, Id, Result, Options)
@@ -164,11 +165,11 @@ client_id(Id, _Options) :-
 json_notify(Stream, Goal, Options) :-
     Goal =.. [Name|Args0],
     call_args(Args0, Args),
-    json_send(Stream,
-              #{ jsonrpc: "2.0",
-                 method: Name,
-                 params: Args
-               }, Options).
+    json_rpc_send(Stream,
+                  #{ jsonrpc: "2.0",
+                     method: Name,
+                     params: Args
+                   }, Options).
 
 %!  json_batch(+Stream, +Notifications:list, +Calls:list, -Results:list,
 %!             +Options) is det.
@@ -194,7 +195,7 @@ json_batch(Stream, Notifications, Calls, Results, Options) :-
     ;   batch_id(IDs, BatchId),
         asserta(pending(BatchId, Stream))
     ),
-    json_send(Stream, Batch, Options),
+    json_rpc_send(Stream, Batch, Options),
     flush_output(Stream),
     (   var(BatchId)
     ->  true
@@ -228,31 +229,6 @@ batch_result(Reply, Result), Result0 = Reply.get(result) =>
 batch_result(Reply, Result), Result0 = Reply.get(error) =>
     Result = error(Result0).
 
-%!  json_send(+Stream, +Dict, +Options)
-
-json_send(Stream, Dict, Options) :-
-    option(header(true), Options),
-    !,
-    with_output_to(string(Msg),
-                   json_write_dict(current_output, Dict, Options)),
-    utf8_length(Msg, Len),
-    format(Stream,
-           'Content-Length: ~d\r\n\r\n~s', [Len, Msg]),
-    flush_output(Stream).
-json_send(Stream, Dict, Options) :-
-    with_output_to(Stream,
-                   json_write_dict(Stream, Dict, Options)),
-    flush_output(Stream).
-
-utf8_length(String, Len) :-
-    setup_call_cleanup(
-        open_null_stream(Null),
-        (   set_stream(Null, encoding(utf8)),
-            format(Null, '~s', [String]),
-            flush_output(Null),
-            byte_count(Null, Len)
-        ),
-        close(Null)).
 
                 /*******************************
                 *        INCOMMING DATA        *
@@ -382,8 +358,10 @@ send_done(Stream, Id, Data) :-
     !,
     json_result_queue(Stream, Queue),
     thread_send_message(Queue, done(Id, Data)).
-send_done(_Stream, Id, throw(error(json_rpc_error(Error), _)) :-
-    print_message(error, error(json_rpc_error(Error, Id), _))).
+send_done(_Stream, Id, throw(error(json_rpc_error(Error), _))) :-
+    !,
+    print_message(error, error(json_rpc_error(Error, Id), _)).
+send_done(_Stream, _Id, _Result).
 
 handle_error(error(existence_error(stream, _), _), EOF) =>
     EOF = true.
