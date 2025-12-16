@@ -261,10 +261,10 @@ json_write_to(Out, Term, Options) :-
 %   Extract JSON data posted  to  this   HTTP  request.  Options are
 %   passed to json_read/3.  In addition, this option is processed:
 %
-%     * json_object(+As)
-%     One of =term= (default) to generate a classical Prolog
-%     term or =dict= to exploit the SWI-Prolog version 7 data type
-%     extensions.  See json_read_dict/3.
+%     - json_object(+As)
+%       One of `term` (default) to generate a classical Prolog
+%       term or `dict` to exploit the SWI-Prolog version 7 data type
+%       extensions.  See json_read_dict/3.
 %
 %   @error  domain_error(mimetype, Found) if the mimetype is
 %           not known (see json_type/1).
