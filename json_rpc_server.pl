@@ -210,15 +210,27 @@ json_rpc_dispatch_1(M, Stream, EOF, Options) :-
 %   Handle a request that has been read  from Stream, possibly sending a
 %   reply to Stream.
 
+:- meta_predicate
+    with_stream(+, 0).
+
 json_rpc_dispatch_request(M, Stream, Requests, Options) :-
     is_list(Requests),
     !,                                          % batch processing
-    maplist(json_rpc_result_r(M, Options), Requests, AllResults),
+    with_stream(Stream,
+                maplist(json_rpc_result_r(M, Options),
+                        Requests, AllResults)),
     include(nonvar, AllResults, Results),
     json_rpc_reply(Stream, Results, Options).
 json_rpc_dispatch_request(M, Stream, Request, Options) :-
-    json_rpc_result(M, Request, Result, Options),
+    with_stream(Stream, json_rpc_result(M, Request, Result, Options)),
     json_rpc_reply(Stream, Result, Options).
+
+with_stream(Stream, Goal) :-
+    setup_call_cleanup(
+        b_setval(json_rpc_stream, Stream),
+        Goal,
+        nb_delete(json_rpc_stream)).
+
 
 %!  json_rpc_reply(+Stream, +Result, +Options) is det.
 
