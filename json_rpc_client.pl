@@ -81,6 +81,10 @@ RPC server.
 %       answer. If the server  answers  anyway,   a  non-error  reply is
 %       ignored, while an error reply  causes   the  error to be printed
 %       along with the request id.
+%     - thread_alias(+Atom)
+%       Alias name to use for the thread that deals with incomming
+%       replies and requests.   Defaults to ``json_rpc_client:<N>``,
+%       where _N_ is a unique number.
 %
 %   @arg Goal is a callable term.  The   functor  name is the method. If
 %   there is a single argument that  is   a  dict,  we invoke a JSON-RPC
@@ -264,8 +268,11 @@ get_json_result_queue(Stream, Queue, _Options) :-
 get_json_result_queue(Stream, Queue, Options) :-
     message_queue_create(Queue),
     asserta(json_result_queue(Stream, Queue)),
-    flag(json_rpc_client_dispatcher, N, N+1),
-    format(atom(Alias), 'json_rpc_client:~w', [N]),
+    (   option(thread_alias(Alias), Options)
+    ->  true
+    ;   flag(json_rpc_client_dispatcher, N, N+1),
+        format(atom(Alias), 'json_rpc_client:~w', [N])
+    ),
     thread_create(
         handle_result_loop(Stream, Options),
         _Id,
