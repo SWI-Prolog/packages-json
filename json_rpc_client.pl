@@ -40,14 +40,16 @@
           ]).
 :- use_module(library(json_rpc_common)).
 :- autoload(library(json), [json_read_dict/3]).
-:- autoload(library(option), [option/2]).
+:- autoload(library(option), [option/2, meta_options/3]).
 :- use_module(library(debug), [debug/3]).
 :- autoload(library(apply), [maplist/4, maplist/3]).
 :- autoload(library(lists), [append/3, member/2]).
 :- autoload(library(terms), [mapsubterms/3]).
 :- autoload(library(http/http_stream), [stream_range_open/3]).
+:- autoload(library(error), [permission_error/3]).
 
 :- meta_predicate
+    json_call(+, +, -, :),
     json_full_duplex(+, :).
 
 /** <module> JSON RPC client
@@ -111,10 +113,10 @@ json_call(Stream, Goal, Result, Options0) :-
     call_args(Args0, Args),
     client_id(Id, Options),
     debug(json_rpc, 'Sending request ~p', [Id]),
-    (   option(async(Goal), Options)
-    ->  (   Goal = _:true
+    (   option(async(AsyncGoal), Options)
+    ->  (   AsyncGoal = _:true
         ->  true
-        ;   asserta(pending(Id, Stream, call(Goal)))
+        ;   asserta(pending(Id, Stream, call(AsyncGoal)))
         ),
         Async = true
     ;   asserta(pending(Id, Stream, reply))
@@ -380,11 +382,14 @@ send_done(_Stream, _Id, _Result).
 reply_done(reply, Id, Stream, Data) =>
     json_result_queue(Stream, Queue),
     thread_send_message(Queue, done(Id, Data)).
-reply_done(call(Goal), _Id, _Stream, Data) =>
+reply_done(call(Goal), _Id, _Stream, true(Data)) =>
     catch_with_backtrace(
         call(Goal, Data),
         Error,
         print_message(error, Error)).
+reply_done(call(_Goal), Id, _Stream,
+           throw(error(json_rpc_error(Error), _))) =>
+    print_message(error, error(json_rpc_error(Error, Id), _)).
 
 handle_error(error(existence_error(stream, _), _), EOF) =>
     EOF = true.
