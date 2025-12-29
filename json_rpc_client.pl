@@ -60,7 +60,7 @@ RPC server.
 
 :- dynamic
     json_result_queue/2,              % Stream, Queue
-    pending/2.                        % Id, Queue
+    pending/3.                        % Id, Stream, Action
 
 %!  json_call(+Stream, +Goal, -Result, +Options) is det.
 %
@@ -76,11 +76,12 @@ RPC server.
 %   Options are passed to   json_write_dict/3  and thread_get_message/3.
 %   Additional options:
 %
-%     - async(true)
-%       While generating an `id` field, we do not wait for the server to
-%       answer. If the server  answers  anyway,   a  non-error  reply is
-%       ignored, while an error reply  causes   the  error to be printed
-%       along with the request id.
+%     - async(:Closure)
+%       Do not wait for the request to complete.  Instead, call
+%       call(Closure, Data) from the client reading thread when
+%       the request is completed.  If Closure is `true`, ignore
+%       the reply.   As we cannot inject errors as exceptions in
+%       the calling thread, possible errors are printed.
 %     - thread_alias(+Atom)
 %       Alias name to use for the thread that deals with incomming
 %       replies and requests.   Defaults to ``json_rpc_client:<N>``,
@@ -104,14 +105,19 @@ RPC server.
 %     Options processed:
 %
 
-json_call(Stream, Goal, Result, Options) :-
+json_call(Stream, Goal, Result, Options0) :-
+    meta_options(is_meta, Options0, Options),
     Goal =.. [Name|Args0],
     call_args(Args0, Args),
     client_id(Id, Options),
     debug(json_rpc, 'Sending request ~p', [Id]),
-    (   option(async(true), Options)
-    ->  Async = true
-    ;   asserta(pending(Id, Stream))
+    (   option(async(Goal), Options)
+    ->  (   Goal = _:true
+        ->  true
+        ;   asserta(pending(Id, Stream, call(Goal)))
+        ),
+        Async = true
+    ;   asserta(pending(Id, Stream, reply))
     ),
     json_rpc_send(Stream,
                   #{ jsonrpc: "2.0",
@@ -123,6 +129,8 @@ json_call(Stream, Goal, Result, Options) :-
     ->  true
     ;   json_wait_reply(Stream, Id, Result, Options)
     ).
+
+is_meta(async).
 
 call_args([Arg], Args), is_dict(Arg) =>
     Args = Arg.
@@ -197,7 +205,7 @@ json_batch(Stream, Notifications, Calls, Results, Options) :-
     (   IDs == []
     ->  true
     ;   batch_id(IDs, BatchId),
-        asserta(pending(BatchId, Stream))
+        asserta(pending(BatchId, Stream, reply))
     ),
     json_rpc_send(Stream, Batch, Options),
     flush_output(Stream),
@@ -361,14 +369,22 @@ handle_reply(Stream, Request, Options),
     json_rpc_server:json_rpc_dispatch_request(M, Stream, Request, Options).
 
 send_done(Stream, Id, Data) :-
-    retract(pending(Id, Stream)),
+    retract(pending(Id, Stream, Action)),
     !,
-    json_result_queue(Stream, Queue),
-    thread_send_message(Queue, done(Id, Data)).
+    reply_done(Action, Id, Stream, Data).
 send_done(_Stream, Id, throw(error(json_rpc_error(Error), _))) :-
     !,
     print_message(error, error(json_rpc_error(Error, Id), _)).
 send_done(_Stream, _Id, _Result).
+
+reply_done(reply, Id, Stream, Data) =>
+    json_result_queue(Stream, Queue),
+    thread_send_message(Queue, done(Id, Data)).
+reply_done(call(Goal), _Id, _Stream, Data) =>
+    catch_with_backtrace(
+        call(Goal, Data),
+        Error,
+        print_message(error, Error)).
 
 handle_error(error(existence_error(stream, _), _), EOF) =>
     EOF = true.
