@@ -163,7 +163,8 @@ arg_type(Schema, Type) =>
 
 system:term_expansion((:- json_method(Methods)), Clauses) :-
     \+ current_prolog_flag(xref, true),
-    phrase(compile_methods(Methods), Clauses).
+    phrase(compile_methods(Methods), Clauses0),
+    sort(Clauses0, Clauses).     % Avoid the need for discontiguous
 
 
                 /*******************************
