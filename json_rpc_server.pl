@@ -311,7 +311,8 @@ check_params(Params, positional(Types), Params, Options) :-
 check_params(Params, positional(Types), _Params, _Options) :-
     length(Types, Expected),
     length(Params, Found),
-    format(string(Msg), "Expected ~d parameters, found ~d", [Expected, Found]),
+    format(string(Msg), "Expected ~d parameters, found ~d",
+           [Expected, Found]),
     raise_param_error_data(Msg).
 check_params(Param, named(Type), [Param], Options) :-
     json_check_param(Options, Type, Param).
@@ -326,6 +327,9 @@ json_rpc_notify(M, Method, Params0, Options) :-
     !,
     check_params(Params0, Types, Params, Options),
     run_method(M:Method, Params, _Result).
+json_rpc_notify(M, Method, Params0, _Options) :-
+    print_message(warning,
+                  json_rpc(not_implemented(M:Method, Params0))).
 
 %!  json_exception_to_reply(+Error, +Request, -Reply) is det.
 %

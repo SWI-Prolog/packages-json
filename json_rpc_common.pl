@@ -68,7 +68,9 @@ utf8_length(String, Len) :-
                 *           MESSAGES           *
                 *******************************/
 
-:- multifile prolog:error_message//1.
+:- multifile
+    prolog:error_message//1,
+    prolog:message//1.
 
 prolog:error_message(json_rpc_error(Obj)) -->
     { is_dict(Obj) },
@@ -92,3 +94,11 @@ json_rpc_error_message_(Obj),
 json_rpc_error_message_(Obj),
     #{code:Code, message:Message} :< Obj ==>
     [ 'JSON RPC application error ~d: ~s'-[Code, Message] ].
+
+prolog:message(json_rpc(Msg)) -->
+    json_rpc_message(Msg).
+
+json_rpc_message(not_implemented(Method, Params)) -->
+    [ 'No implementation for ~p using paramenters ~p'-
+      [Method, Params]
+    ].
