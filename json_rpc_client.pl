@@ -121,12 +121,19 @@ json_call(Stream, Goal, Result, Options0) :-
         Async = true
     ;   asserta(pending(Id, Stream, reply))
     ),
-    json_rpc_send(Stream,
-                  #{ jsonrpc: "2.0",
-                     id: Id,
-                     method: Name,
-                     params: Args
-                   }, Options),
+    (   Args == []
+    ->  json_rpc_send(Stream,
+                      #{ jsonrpc: "2.0",
+                         id: Id,
+                         method: Name
+                       }, Options)
+    ;   json_rpc_send(Stream,
+                      #{ jsonrpc: "2.0",
+                         id: Id,
+                         method: Name,
+                         params: Args
+                       }, Options)
+    ),
     (   Async == true
     ->  true
     ;   json_wait_reply(Stream, Id, Result, Options)
@@ -179,11 +186,17 @@ client_id(Id, _Options) :-
 json_notify(Stream, Goal, Options) :-
     Goal =.. [Name|Args0],
     call_args(Args0, Args),
-    json_rpc_send(Stream,
-                  #{ jsonrpc: "2.0",
-                     method: Name,
-                     params: Args
-                   }, Options).
+    (   Args == []
+    ->  json_rpc_send(Stream,
+                      #{ jsonrpc: "2.0",
+                         method: Name
+                       }, Options)
+    ;   json_rpc_send(Stream,
+                      #{ jsonrpc: "2.0",
+                         method: Name,
+                         params: Args
+                       }, Options)
+    ).
 
 %!  json_batch(+Stream, +Notifications:list, +Calls:list, -Results:list,
 %!             +Options) is det.
