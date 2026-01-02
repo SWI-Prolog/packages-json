@@ -257,8 +257,9 @@ json_rpc_result_r(M, Options, Request, Result) :-
 
 :- det(json_rpc_result_/4).
 json_rpc_result_(M, Request, Result, Options) :-
-    (   #{jsonrpc: "2.0", method:MethodS, params:Params} :< Request
-    ->  atom_string(Method, MethodS),
+    (   #{jsonrpc: "2.0", method:MethodS} :< Request
+    ->  Params = Request.get(params, #{}),
+        atom_string(Method, MethodS),
         (   Id = Request.get(id)
         ->  json_rpc_result(M, Method, Params, Id, Result, Options)
         ;   json_rpc_notify(M, Method, Params, Options)
@@ -305,6 +306,11 @@ json_rpc_result(_M, Method, _Params, Id, Reply, _Options) :-
                        }
              }.
 
+%!  check_params(+CallParams, +ExpectedTypes, -Params, +Options) is det.
+
+check_params(#{}, positional([]), Params, _Options) :-
+    !,
+    Params = [].
 check_params(Params, positional(Types), Params, Options) :-
     must_be(list, Params),
     maplist(json_check_param(Options), Types, Params),
