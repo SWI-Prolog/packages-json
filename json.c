@@ -65,7 +65,7 @@ free_text(text *t)
 }
 
 static int
-put_byte(text *t, int c)
+put_byte(text *t, char c)
 { if ( t->o < t->e )
   { *t->o++ = c;
   } else
@@ -106,14 +106,14 @@ json_read_number(term_t stream, term_t c0, term_t number)
     return FALSE;
 
   init_text(&t);
-  put_byte(&t, c);
+  put_byte(&t, (char) c); /* safe cast, see json.pl */
 
   for(;;)
   { c = Speekcode(in);
 
     if ( (c >= '0' && c <= '9') ||
 	 c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E' )
-    { if ( put_byte(&t, c) != 0 )
+    { if ( put_byte(&t, (char*) c) != 0 ) /* safe cast */
       { rc = PL_resource_error("memory");
 	break;
       }
