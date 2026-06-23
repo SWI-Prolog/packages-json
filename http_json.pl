@@ -284,11 +284,11 @@ http_read_json(Request, JSON, Options) :-
 
 request_to_json(Request, JSON, Options) :-
     option(method(Method), Request),
-    option(content_type(Type), Request),
     (   data_method(Method)
     ->  true
     ;   domain_error(method, Method)
     ),
+    option(content_type(Type), Request),
     (   is_json_content_type(Type)
     ->  true
     ;   domain_error(mimetype, Type)
