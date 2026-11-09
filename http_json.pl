@@ -482,6 +482,15 @@ json_status_reply(not_acceptable(Why),
                   [ 'Request is not acceptable: ~p'-[Why]
                   ],
                   _{}).
+json_status_reply(payload_too_large(MaxSize),
+                  [ 'Request body exceeds the maximum size of ~D bytes'-[MaxSize]
+                  ],
+                  _{max_request_size:MaxSize}) :-
+    integer(MaxSize),
+    !.
+json_status_reply(payload_too_large(_),
+                  [ 'Request body is too large' ],
+                  _{}).
 json_status_reply(server_error(ErrorTerm), Lines, _{}) :-
     '$messages':translate_message(ErrorTerm, Lines, []).
 json_status_reply(service_unavailable(Why),
