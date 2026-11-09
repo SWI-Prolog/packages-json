@@ -491,6 +491,9 @@ json_status_reply(payload_too_large(MaxSize),
 json_status_reply(payload_too_large(_),
                   [ 'Request body is too large' ],
                   _{}).
+json_status_reply(request_header_fields_too_large,
+                  [ 'Request header is too large' ],
+                  _{}).
 json_status_reply(server_error(ErrorTerm), Lines, _{}) :-
     '$messages':translate_message(ErrorTerm, Lines, []).
 json_status_reply(service_unavailable(Why),
