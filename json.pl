@@ -1045,7 +1045,7 @@ term_to_dict(Var, Var, _Options) :-
 term_to_dict(json(Pairs), Dict, Options) :-
     !,
     (   json_options_tag(Options, TagName),
-        Tag \== '',
+        TagName \== '',
         select(TagName = Tag0, Pairs, NVPairs),
         to_atom(Tag0, Tag)
     ->  json_dict_pairs(NVPairs, DictPairs, Options)

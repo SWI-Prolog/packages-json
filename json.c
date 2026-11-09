@@ -88,9 +88,13 @@ put_byte(text *t, int c)
   { size_t cnt = t->o - t->t;
 
     if ( t->t == t->buf )
-    { t->allocated = FAST_BUFFER*2;
-      if ( !(t->t = malloc(t->allocated)) )
+    { char *n;
+
+      t->allocated = FAST_BUFFER*2;
+      if ( !(n = malloc(t->allocated)) )
 	return -1;
+      memcpy(n, t->buf, cnt);
+      t->t = n;
     } else {
       char *n;
       t->allocated *= 2;
@@ -181,8 +185,7 @@ json_skip_ws(term_t stream, term_t c0, term_t next)
     { c = Sgetcode(in);
     } while ( is_ws(c) );
 
-    PL_release_stream(in);
-    if ( c == -1 && Sferror(in) )
+    if ( !PL_release_stream(in) )
       return false;
   }
 
@@ -198,22 +201,15 @@ json_skip_ws(term_t stream, term_t c0, term_t next)
 
 static int
 json_put_code(IOSTREAM *out, int pc, int c)
-{ static char escape[128];
-  static int escape_initialized = FALSE;
-
-  if ( !escape_initialized )
-  { memset(escape, 0, sizeof(escape));
-
-    escape['"']  = '"';
-    escape['\\'] = '\\';
-    escape['\b'] = 'b';
-    escape['\f'] = 'f';
-    escape['\n'] = 'n';
-    escape['\r'] = 'r';
-    escape['\t'] = 't';
-
-    escape_initialized = TRUE;
-  }
+{ static const char escape[128] =
+  { ['"']  = '"',
+    ['\\'] = '\\',
+    ['\b'] = 'b',
+    ['\f'] = 'f',
+    ['\n'] = 'n',
+    ['\r'] = 'r',
+    ['\t'] = 't'
+  };
 
   if ( c < 128 )
   { if ( escape[c] )

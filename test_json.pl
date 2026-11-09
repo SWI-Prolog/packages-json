@@ -90,6 +90,15 @@ test(empty, X == json([])) :-
 test(empty, X == json([])) :-
     atom_json_term('  { } ', X, []).
 
+test(long_number, X == Y) :-		% > 256 chars used to fail
+    numlist(1, 200, L), atomic_list_concat(L, A),
+    atom_json_term(A, X, []),
+    atom_number(A, Y).
+
+test(empty_key, Tag-Pairs == '#'-[''-"x", a-1]) :- % used to become the tag
+    atom_json_dict('{"":"x","a":1}', D, []),
+    dict_pairs(D, Tag, Pairs).
+
 
 :- end_tests(json_read).
 
@@ -133,6 +142,12 @@ test(pt2json, JSON == json([x=25,y=50,type=point])) :-
 
 test(json2pt, X == point(25,50)) :-
     json_to_prolog(json([x=25,y=50]), X).
+test(cache_bounded, true(C < 1000)) :-
+    forall(between(1, 2000, I),
+           ( format(atom(K), 'k~d', [I]),
+             json_to_prolog(json([K=1]), _) )),
+    predicate_property(json_convert:created_rules_for_pairs(_,_),
+                       number_of_clauses(C)).
 test(json2pt, X == point(25,50)) :-
     json_to_prolog(json([y=50,x=25]), X).
 test(json2pt, X == fpoint(25.1,50.0)) :-

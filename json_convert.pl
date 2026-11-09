@@ -560,6 +560,7 @@ pairs_to_term(Pairs, Term, Module) :-
                 RulePairs),
         keysort(RulePairs, ByQuality),
         pairs_values(ByQuality, Rules),
+        prune_cache,
         maplist(asserta, Rules),
         asserta(created_rules_for_pairs(M, PairArgs)),
         json_to_prolog_rule(M, Pairs, Term), !
@@ -568,6 +569,19 @@ pairs_to_term(Pairs, Term, Module) :-
 pairs_args([], []).
 pairs_args([Name=_Value|T0], [Name=_|T]) :-
     pairs_args(T0, T).
+
+%!  prune_cache
+%
+%   The cache has an entry for each  distinct sequence of keys. Clear it
+%   if it gets too large, so JSON data   cannot  make it grow without
+%   bounds.
+
+prune_cache :-
+    predicate_property(created_rules_for_pairs(_,_), number_of_clauses(N)),
+    N >= 1000,
+    !,
+    clear_cache.
+prune_cache.
 
 %!  create_rule(+PairArgs, +Module, -ObjectM, -Term, -Body,
 %!              -Quality) is det.
