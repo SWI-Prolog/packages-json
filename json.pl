@@ -70,6 +70,7 @@
                        false(ground),
                        end_of_file(ground),
                        value_string_as(oneof([atom,string])),
+                       non_finite(oneof([error,null,json5])),
                        qqdict(list(compound(=(atom,var))))
                      ]).
 :- predicate_options(json_write/3, 3,
@@ -80,6 +81,7 @@
                        null(ground),
                        true(ground),
                        false(ground),
+                       non_finite(oneof([error,null,json5])),
                        serialize_unknown(boolean)
                      ]).
 :- predicate_options(json_read_dict/3, 3,
@@ -134,10 +136,11 @@ terms.
               value_string_as:oneof([atom,string]) = atom,
               tag:atom = '',
               default_tag:(var;atom) = '#',
-              qqdict:list(compound(atom=var))).
+              qqdict:list(compound(atom=var)),
+              non_finite:oneof([error,null,json5]) = error).
 
 default_json_dict_options(
-    json_options(null, true, false, error, string, '', #, _)).
+    json_options(null, true, false, error, string, '', #, _, error)).
 
 
                  /*******************************
@@ -248,6 +251,11 @@ type_term(chars,  Result, chars(Result)).
 %       The alternative is `string`, producing a packed string object.
 %       Please note that `codes` or `chars` would produce ambiguous
 %       output and are therefore not supported.
+%     - non_finite(+How)
+%       JSON does not support the floating point values infinity and
+%       NaN.  If How is `json5`, accept the JSON5 tokens `Infinity`,
+%       `-Infinity` and `NaN`.  Otherwise (default `error`), these are
+%       syntax errors.
 %
 %   @see    json_read_dict/3 to read a JSON term using the version 7
 %           extended data types.
@@ -313,13 +321,29 @@ json_term_top(0'", Stream, String, Options) :-
     json_string_codes(C1, Stream, Codes),
     json_options_value_string_as(Options, Type),
     codes_to_type(Type, Codes, String).
-json_term_top(0'-, Stream, Number, _Options) :-
+json_term_top(0'-, Stream, Number, Options) :-
     !,
-    json_read_number(Stream, 0'-, Number).
+    (   json_options_non_finite(Options, json5),
+        peek_code(Stream, 0'I)
+    ->  get_code(Stream, _),
+        must_see(`nfinity`, Stream, 'Infinity'),
+        Number is -inf
+    ;   json_read_number(Stream, 0'-, Number)
+    ).
 json_term_top(D, Stream, Number, _Options) :-
     between(0'0, 0'9, D),
     !,
     json_read_number(Stream, D, Number).
+json_term_top(0'I, Stream, Number, Options) :-
+    json_options_non_finite(Options, json5),
+    !,
+    must_see(`nfinity`, Stream, 'Infinity'),
+    Number is inf.
+json_term_top(0'N, Stream, Number, Options) :-
+    json_options_non_finite(Options, json5),
+    !,
+    must_see(`aN`, Stream, 'NaN'),
+    Number is nan.
 json_term_top(C, Stream, Constant, Options) :-
     json_read_constant(C, Stream, ID),
     !,
@@ -416,6 +440,8 @@ escape(0'u, Stream, C) :-
     get_XXXX(Stream, H),
     (   hi_surrogate(H)
     ->  get_surrogate_tail(Stream, H, C)
+    ;   lo_surrogate(H)
+    ->  syntax_error(illegal_surrogate_pair, Stream)
     ;   C = H
     ).
 
@@ -581,6 +607,13 @@ stream_error_context(Stream, stream(Stream, Line, LinePos, CharNo)) :-
 %       Distance between tab-stops.  If equal to Step, layout
 %       is generated with one tab per level.
 %
+%       * non_finite(+How)
+%       JSON has no representation for the floating point values
+%       infinity and NaN.  How is one of `error` (default), raising
+%       a domain error, `null`, writing these values as `null` or
+%       `json5`, writing them as the JSON5 tokens `Infinity`,
+%       `-Infinity` and `NaN`.
+%
 %       * serialize_unknown(+Boolean)
 %       If `true` (default `false`), serialize unknown terms and
 %       print them as a JSON string.  The default raises a type
@@ -589,9 +622,14 @@ stream_error_context(Stream, stream(Stream, Line, LinePos, CharNo)) :-
 %       Prolog representation of a Prolog term.
 %
 %   If a string is  emitted,  the   sequence  =|</|=  is  emitted as
-%   =|<\/|=. This is valid  JSON  syntax   which  ensures  that JSON
+%   =|<\/|=, =|<!|= as =|<\u0021|= and the characters U+2028 and U+2029
+%   are escaped. This is valid  JSON  syntax   which  ensures  that JSON
 %   objects  can  be  safely  embedded  into  an  HTML  =|<script>|=
 %   element.
+%
+%   Integer keys, as may appear in dicts, are written as strings.
+%
+%   @error domain_error(acyclic_term, Term) if Term is cyclic.
 
 %!  json_write_hook(+Term, +Stream, +State, +Options) is semidet.
 %
@@ -625,6 +663,7 @@ stream_error_context(Stream, stream(Stream, Line, LinePos, CharNo)) :-
 json_write(Stream, Term) :-
     json_write(Stream, Term, []).
 json_write(Stream, Term, Options) :-
+    must_be(acyclic, Term),
     make_json_write_state(Options, State, Options1),
     make_json_options(Options1, OptionTerm, _RestOptions),
     json_write_term(Term, Stream, State, OptionTerm).
@@ -670,15 +709,17 @@ json_write_term(List, Stream, State, Options) :-
 json_write_term(Term, Stream, State, Options) :-
     json_write_hook(Term, Stream, State, Options),
     !.
-json_write_term(Number, Stream, _State, _Options) :-
+json_write_term(Number, Stream, _State, Options) :-
     number(Number),
     !,
-    (   float(Number)
+    (   integer(Number)
     ->  write(Stream, Number)
-    ;   integer(Number)
-    ->  write(Stream, Number)
-    ;   Float is float(Number)              % rational number
-    ->  write(Stream, Float)
+    ;   Float is float(Number),             % float or rational number
+        (   finite_float(Float)
+        ->  write(Stream, Float)
+        ;   json_options_non_finite(Options, How),
+            json_write_non_finite(How, Float, Stream)
+        )
     ).
 json_write_term(True, Stream, _State, Options) :-
     json_options_true(Options, True),
@@ -714,6 +755,23 @@ json_write_term(AnyTerm, Stream, State, _Options) :-
     ->  term_string(AnyTerm, String),
         json_write_string(Stream, String)
     ;   type_error(json_term, AnyTerm)
+    ).
+
+finite_float(Float) :-
+    float_class(Float, Class),
+    Class \== nan,
+    Class \== infinite.
+
+json_write_non_finite(error, Float, _) :-
+    domain_error(json_number, Float).
+json_write_non_finite(null, _, Stream) :-
+    write(Stream, null).
+json_write_non_finite(json5, Float, Stream) :-
+    (   float_class(Float, nan)
+    ->  write(Stream, 'NaN')
+    ;   Float > 0
+    ->  write(Stream, 'Infinity')
+    ;   write(Stream, '-Infinity')
     ).
 
 json_pairs(Dict, Pairs) :-
@@ -874,7 +932,11 @@ json_print_length(True, Options, Max, Len0, Len) :-
 json_print_length(Number, _Options, Max, Len0, Len) :-
     number(Number),
     !,
-    write_size(Number, AL, _H, []),
+    (   float(Number),
+        \+ finite_float(Number)
+    ->  AL = 9                              % -Infinity
+    ;   write_size(Number, AL, _H, [])
+    ),
     Len is Len0 + AL,
     Len =< Max.
 json_print_length(@(Id), _Options, Max, Len0, Len) :-
@@ -937,6 +999,11 @@ string_len(String, Len0, Len) :-
     string(String),
     !,
     string_length(String, AL),
+    Len is Len0 + AL + 2.
+string_len(Int, Len0, Len) :-               % Integer dict key
+    integer(Int),
+    !,
+    write_size(Int, AL, _, []),
     Len is Len0 + AL + 2.
 
 
@@ -1101,6 +1168,7 @@ json_write_dict(Stream, Dict) :-
     json_write_dict(Stream, Dict, []).
 
 json_write_dict(Stream, Dict, Options) :-
+    must_be(acyclic, Dict),
     make_json_write_state(Options, State, Options1),
     make_json_dict_options(Options1, OptionTerm, _RestOptions),
     json_write_term(Dict, Stream, State, OptionTerm).

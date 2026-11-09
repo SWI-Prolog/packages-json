@@ -95,6 +95,20 @@ test(long_number, X == Y) :-		% > 256 chars used to fail
     atom_json_term(A, X, []),
     atom_number(A, Y).
 
+test(non_finite, error(syntax_error(json(illegal_json)))) :-
+    atom_json_term('NaN', _, []).
+test(non_finite, error(syntax_error(_))) :-
+    atom_json_term('-Infinity', _, []).
+test(non_finite, X == [Inf, NInf]) :-
+    Inf is inf, NInf is -inf,
+    atom_json_term('[Infinity, -Infinity]', X, [non_finite(json5)]).
+test(non_finite, true(float_class(X, nan))) :-
+    atom_json_term('NaN', X, [non_finite(json5)]).
+test(non_finite, X == -1) :-
+    atom_json_term('-1', X, [non_finite(json5)]).
+test(lone_surrogate, error(syntax_error(json(illegal_surrogate_pair)))) :-
+    atom_json_term('"\\udc00"', _, []).
+
 test(empty_key, Tag-Pairs == '#'-[''-"x", a-1]) :- % used to become the tag
     atom_json_dict('{"":"x","a":1}', D, []),
     dict_pairs(D, Tag, Pairs).
@@ -118,6 +132,30 @@ test(control, A == '"\\u0001"') :-
 % with a 16 bit wchar_t (Windows).  See issue #1528.
 test(non_bmp, A == '{"x":"\U0001F60A"}') :-
     atom_json_term(A, json([x='\U0001F60A']), [width(0)]).
+
+test(non_finite, error(domain_error(json_number, _))) :-
+    X is inf,
+    atom_json_term(_, [X], [width(0)]).
+test(non_finite, error(domain_error(json_number, _))) :-
+    X is nan,
+    atom_json_term(_, [X], [width(0)]).
+test(non_finite, A == '[null, null, null, 1.5 ]') :-
+    X is inf, Y is -inf, Z is nan,
+    atom_json_term(A, [X,Y,Z,1.5], [non_finite(null)]).
+test(non_finite, A == '[Infinity, -Infinity, NaN, 1.5 ]') :-
+    X is inf, Y is -inf, Z is nan,
+    atom_json_term(A, [X,Y,Z,1.5], [non_finite(json5)]).
+test(html, A == '"<\\/script><\\u0021--"') :-
+    atom_json_term(A, '</script><!--', []).
+test(html, A == '"a\\u2028b\\u2029c"') :-
+    atom_json_term(A, 'a\u2028b\u2029c', []).
+test(int_key, A == '{"1":"a","b":2}') :-
+    atom_json_dict(A, _{1:a, b:2}, []).
+test(int_key, A == '{\n  "1":"a",\n  "b":2\n}') :-
+    atom_json_dict(A, _{1:a, b:2}, [width(1)]).
+test(cyclic, error(domain_error(acyclic_term, _))) :-
+    L = [a=1|L],
+    atom_json_term(_, json(L), [width(0)]).
 
 :- end_tests(json_write).
 

@@ -223,12 +223,18 @@ json_put_code(IOSTREAM *out, int pc, int c)
                                         /* allow safe embedding in html */
     { TRYPUTC('\\', out);
       TRYPUTC('/', out);
+    } else if ( pc == '<' && c == '!' )	/* Similar for <!, avoiding <!-- */
+    { TRYPUTC('\\', out);
+      if ( Sfprintf(out, "u%04x", c) < 0 )
+	return -1;
     } else
     { TRYPUTC(c, out);
     }
-  } else if ( IS_UTF16_SURROGATE(c) )
-  { /* Cannot be represented in UTF-8.  Emit the escape ourselves rather
-       than relying on the representation error handling of the stream. */
+  } else if ( IS_UTF16_SURROGATE(c) || c == 0x2028 || c == 0x2029 )
+  { /* Surrogates cannot be represented in UTF-8.  Emit the escape
+       ourselves rather than relying on the representation error handling
+       of the stream.  U+2028 and U+2029 are line terminators in
+       JavaScript before ES2019, so escape them for embedding in HTML. */
     TRYPUTC('\\', out);
     if ( Sfprintf(out, "u%04x", c) < 0 )
       return -1;
@@ -284,7 +290,8 @@ json_write_string(term_t stream, term_t text)
   if ( !PL_get_stream(stream, &out, SIO_OUTPUT) )
     return FALSE;
 
-  if ( PL_get_nchars(text, &len, &a, CVT_ATOM|CVT_STRING|CVT_LIST) )
+  /* CVT_INTEGER: integer keys, as may appear in dicts */
+  if ( PL_get_nchars(text, &len, &a, CVT_ATOM|CVT_STRING|CVT_LIST|CVT_INTEGER) )
   { const char *ap;
     size_t todo;
     int pc = 0;
@@ -299,7 +306,8 @@ json_write_string(term_t stream, term_t text)
       pc = c;
     }
     TRYPUTC('"', out);
-  } else if ( PL_get_wchars(text, &len, &w, CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+  } else if ( PL_get_wchars(text, &len, &w,
+			    CVT_ATOM|CVT_STRING|CVT_LIST|CVT_INTEGER|CVT_EXCEPTION) )
   { const wchar_t *wp=w, *we=w+len;
     int pc=0, c;
 
