@@ -117,13 +117,13 @@ static foreign_t
 json_read_number(term_t stream, term_t c0, term_t number)
 { IOSTREAM *in;
   text t;
-  int rc = FALSE;
+  int rc = false;
   int c;
   term_t tmp;
 
   if ( !PL_get_stream(stream, &in, SIO_INPUT) ||
-       !PL_get_char_ex(c0, &c, FALSE) )
-    return FALSE;
+       !PL_get_char_ex(c0, &c, false) )
+    return false;
 
   init_text(&t);
   put_byte(&t, c);
@@ -172,14 +172,14 @@ static foreign_t
 json_skip_ws(term_t stream, term_t c0, term_t next)
 { int c;
 
-  if ( !PL_get_char_ex(c0, &c, TRUE) )
-    return FALSE;
+  if ( !PL_get_char_ex(c0, &c, true) )
+    return false;
 
   if ( is_ws(c) )
   { IOSTREAM *in;
 
     if ( !PL_get_stream(stream, &in, SIO_INPUT) )
-      return FALSE;
+      return false;
 
     do
     { c = Sgetcode(in);
@@ -246,7 +246,7 @@ json_put_code(IOSTREAM *out, int pc, int c)
 }
 
 #undef TRYPUTC
-#define TRYPUTC(c, s) if ( Sputcode(c, s) < 0 ) { rc = FALSE; goto out; }
+#define TRYPUTC(c, s) if ( Sputcode(c, s) < 0 ) { rc = false; goto out; }
 
 #if SIZEOF_WCHAR_T == 2
 #define IS_UTF16_LEAD(c)      ((c) >= 0xD800 && (c) <= 0xDBFF)
@@ -285,10 +285,10 @@ json_write_string(term_t stream, term_t text)
   char *a;
   pl_wchar_t *w;
   size_t len;
-  int rc = TRUE;
+  int rc = true;
 
   if ( !PL_get_stream(stream, &out, SIO_OUTPUT) )
-    return FALSE;
+    return false;
 
   /* CVT_INTEGER: integer keys, as may appear in dicts */
   if ( PL_get_nchars(text, &len, &a, CVT_ATOM|CVT_STRING|CVT_LIST|CVT_INTEGER) )
@@ -301,7 +301,7 @@ json_write_string(term_t stream, term_t text)
     { int c = *ap&0xff;
 
       if ( json_put_code(out, pc, c) < 0 )
-      { rc = FALSE; goto out;
+      { rc = false; goto out;
       }
       pc = c;
     }
@@ -315,13 +315,13 @@ json_write_string(term_t stream, term_t text)
     while(wp < we)
     { wp = get_wchar(wp, &c);
       if ( json_put_code(out, pc, c) < 0 )
-      { rc = FALSE; goto out;
+      { rc = false; goto out;
       }
       pc = c;
     }
     TRYPUTC('"', out);
   } else
-  { rc = FALSE;
+  { rc = false;
   }
 
 out:
@@ -338,10 +338,10 @@ json_write_indent(term_t stream, term_t indent, term_t tab)
 
   if ( !PL_get_integer(indent, &i) ||
        !PL_get_integer(tab, &t) )
-    return FALSE;
+    return false;
 
   if ( PL_get_stream(stream, &out, SIO_OUTPUT) )
-  { int rc = TRUE;
+  { int rc = true;
 
     if ( !out->position || out->position->linepos > 0 )
     { TRYPUTC('\n', out);
@@ -355,7 +355,7 @@ out:
     return rc;
   }
 
-  return FALSE;
+  return false;
 }
 
 
