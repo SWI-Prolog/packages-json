@@ -163,7 +163,7 @@ json_read_number(term_t stream, term_t c0, term_t number)
   return rc;
 }
 
-static int
+static bool
 is_ws(int c)
 { return ( c == ' ' || c == '\t' || c == '\n' || c == '\r' );
 }
